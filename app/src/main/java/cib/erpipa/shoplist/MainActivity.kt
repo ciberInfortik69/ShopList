@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// queda pendiente hacer el auth y eso
+// queda pendiente hacer el auth y eso awdawdadawdad
 
 @PreviewScreenSizes
 @Composable
