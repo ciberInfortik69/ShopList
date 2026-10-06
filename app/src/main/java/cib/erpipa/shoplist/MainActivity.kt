@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// queda pendiente hacer el auth y eso
+
 @PreviewScreenSizes
 @Composable
 fun ShopListApp() {
