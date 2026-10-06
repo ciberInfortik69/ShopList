@@ -12,7 +12,20 @@
           "package_name": "cib.erpipa.shoplist"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "242221971105-278ue67tnkpdgvcs1hm104s68mqrgri5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cib.erpipa.shoplist",
+            "certificate_hash": "92aa94aac5de0979fda97ddbb9816c3d7be8ebb5"
+          }
+        },
+        {
+          "client_id": "242221971105-ekp51thsmg1sqq83q182p5tjengot89m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyArJ6SV0eQXZY4l8wqfbEY3uI727IQpb1s"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "242221971105-ekp51thsmg1sqq83q182p5tjengot89m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
