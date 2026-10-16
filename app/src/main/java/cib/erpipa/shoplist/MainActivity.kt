@@ -255,7 +255,7 @@ private fun handleSignInResult(
 fun ShopListScreen(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Text(
-            text = "List of lists",
+            text = "Lista de listas - Valentin",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
