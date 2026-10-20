@@ -439,7 +439,6 @@ fun ShopListScreen(
 
 }
 
-
 /**
  * Previsualización sin datos reales para el diseñador de Android Studio
  */
