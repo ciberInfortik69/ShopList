@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
             // Autentica en Firebase usando el token obtenido de Google
             firebaseAuthWithGoogle(googleIdTokenCredential.idToken)
         } else {
-            Log.w(TAG, "¡La credencial no es de tipo Google ID!")
+            Log.w(TAG, "¡La credencial no es de Google ID!")
         }
     }
 
