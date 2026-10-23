@@ -75,6 +75,101 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /**
+     * Método del ciclo de vida que se ejecuta cuando la app pasa a primer plano.
+     */
+    override fun onStart() {
+        super.onStart()
+        // Verificar si el usuario ya tiene una sesión activa al abrir la app
+        val currentUser = auth.currentUser
+        updateUI(currentUser)
+    }
+
+    /**
+     * Lanza la interfaz nativa de Credential Manager de Android para iniciar sesión con Google
+     */
+    fun signInWithGoogle() {
+        // Configura las opciones para solicitar la cuenta de Google
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(getString(R.string.default_web_client_id))
+            .build()
+
+        // Construye la petición de credenciales
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        // Asíncronamente (en una corrutina), solicita la cuenta al usuario
+        lifecycleScope.launch {
+            try {
+                val result = credentialManager.getCredential(
+                    context = this@MainActivity,
+                    request = request
+                )
+                // Procesa la credencial obtenida
+                handleSignIn(result.credential)
+            } catch (e: GetCredentialException) {
+                Log.e(TAG, "No se pudieron obtener las credenciales: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    /**
+     * Procesa la credencial recibida de Credential Manager y extrae el token de Google
+     */
+    private fun handleSignIn(credential: Credential) {
+        if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+            // Autentica en Firebase usando el token obtenido de Google
+            firebaseAuthWithGoogle(googleIdTokenCredential.idToken)
+        } else {
+            Log.w(TAG, "¡La credencial no es de Google ID!")
+        }
+    }
+
+    /**
+     * Autentica la cuenta en Firebase Auth usando el ID Token recibido de Google
+     */
+    private fun firebaseAuthWithGoogle(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    Log.d(TAG, "signInWithCredential:éxito")
+                    val user = auth.currentUser
+                    updateUI(user)
+                } else {
+                    Log.w(TAG, "signInWithCredential:fallo", task.exception)
+                    updateUI(null)
+                }
+            }
+    }
+
+    /**
+     * Cierra la sesión activa en Firebase y limpia el estado de las credenciales de Google
+     */
+    fun signOut() {
+        auth.signOut()
+
+        lifecycleScope.launch {
+            try {
+                val clearRequest = ClearCredentialStateRequest()
+                credentialManager.clearCredentialState(clearRequest)
+                updateUI(null)
+            } catch (e: ClearCredentialException) {
+                Log.e(TAG, "No se pudieron limpiar las credenciales: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    /**
+     * Método auxiliar para actualizar la interfaz si fuera necesario tras un cambio de usuario
+     */
+    private fun updateUI(user: FirebaseUser?) {
+        // Método para actualizar la UI cuando cambie el estado del usuario si fuese necesario
+    }
 }
 
 @PreviewScreenSizes
@@ -272,6 +367,17 @@ fun ShopListScreen(modifier: Modifier = Modifier) {
     }
 }
 
+// =============================================================================
+// SECCIÓN 4: MODELOS DE NAVEGACIÓN Y DESTINOS
+// =============================================================================
+
+/**
+ * Enum que define los tres destinos o pestañas principales de la barra de navegación:
+ * Home (Inicio), Favorites (Favoritos) y Profile (Perfil).
+ *
+ * @param label Texto visible en la barra de navegación.
+ * @param icon Recurso de imagen/icono asociado a la pestaña.dff
+ */
 enum class AppDestinations(
     val label: String,
     val icon: Int,
