@@ -1,50 +1,53 @@
 package cib.erpipa.shoplist
 
+import android.R.attr.text
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle.Companion.Italic
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
-import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.ClearCredentialException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.lifecycle.lifecycleScope
 import cib.erpipa.shoplist.ui.theme.ShopListTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.analytics
@@ -54,24 +57,60 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.launch
 
+// Etiqueta (TAG) utilizada para filtrar los mensajes de depuración en el Logcat de Android Studio
+private const val TAG = "ShopListApp"
+
+// =============================================================================
+// SECCIÓN 1: ACTIVIDAD PRINCIPAL Y AUTENTICACIÓN (MainActivity)
+// =============================================================================
+
+/**
+ * MainActivity es el punto de entrada principal de la aplicación en Android.
+ * Se encarga de inicializar los servicios de Firebase y Credential Manager,
+ * manejar el flujo de inicio/cierre de sesión con Google y lanzar la interfaz gráfica (Compose).
+ */
 class MainActivity : ComponentActivity() {
 
-    private lateinit var analytics: FirebaseAnalytics
-    // Instancia de Firebase Auth para gestionar la sesión del usuario
-    private lateinit var auth: FirebaseAuth
+    /**
+     * Modelo de datos que representa una lista de compras individual.
+     * @param id Identificador único numérico de la lista.
+     * @param name Nombre o título dado a la lista.
+     * @param products Lista de nombres de productos que contiene la lista.
+     */
+    data class ShoppingList(
+        val id: Int,
+        val name: String,
+        val products: List<String> = emptyList()
+    )
 
+    // Variables privadas para gestionar servicios de Firebase y autenticación de Android
+    private lateinit var analytics: FirebaseAnalytics
+    private lateinit var auth: FirebaseAuth
+    private lateinit var credentialManager: CredentialManager
+
+    /**
+     * Método que se ejecuta al crearse la actividad por primera vez.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inicializamos Analytics y Firebase Authentication
+        // Inicialización de servicios del sistema y Firebase
+        credentialManager = CredentialManager.create(baseContext)
         analytics = Firebase.analytics
         auth = Firebase.auth
 
+        // Permite que el contenido se extienda debajo de las barras del sistema (pantalla completa)
         enableEdgeToEdge()
+
+        // Establece la interfaz gráfica definida en Jetpack Compose
         setContent {
             ShopListTheme {
-                // Pasamos la instancia de auth a la app de Jetpack Compose
-                ShopListApp(auth = auth)
+                // Llama al componente principal de la aplicación pasando la sesión y las callbacks de autenticación
+                ShopListApp(
+                    auth = auth,
+                    onSignIn = { signInWithGoogle() },
+                    onSignOut = { signOut() }
+                )
             }
         }
     }
@@ -125,7 +164,7 @@ class MainActivity : ComponentActivity() {
             // Autentica en Firebase usando el token obtenido de Google
             firebaseAuthWithGoogle(googleIdTokenCredential.idToken)
         } else {
-            Log.w(TAG, "¡La credencial no es de Google ID!")
+            Log.w(TAG, "¡La credencial no es de tipo Google ID!")
         }
     }
 
@@ -172,27 +211,41 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@PreviewScreenSizes
+// =============================================================================
+// SECCIÓN 2: ESTRUCTURA Y NAVEGACIÓN PRINCIPAL (ShopListApp)
+// =============================================================================
+
+/**
+ * Componente principal que define la estructura y navegación general de la aplicación.
+ *
+ * @param auth Instancia opcional de FirebaseAuth para escuchar cambios de sesión.
+ * @param onSignIn Función lambda que se ejecuta para iniciar sesión.
+ * @param onSignOut Función lambda que se ejecuta para cerrar sesión.
+ */
+@Preview(showSystemUi = true)
 @Composable
-fun ShopListApp(auth: FirebaseAuth? = null) {
+fun ShopListApp(
+    auth: FirebaseAuth? = null,
+    onSignIn: () -> Unit = {},
+    onSignOut: () -> Unit = {}
+) {
+    // Guarda el destino de navegación seleccionado actualmente (Home, Favorites, Profile)
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
 
-    // Estado reactivo que mantiene la información del usuario logueado en tiempo real
+    // Estado reactivo que rastrea y guarda la sesión activa del usuario
     var currentUser by remember { mutableStateOf(auth?.currentUser) }
 
-    // Listener que detecta automáticamente si el usuario inicia o cierra sesión en Firebase
+    // Escuchador que detecta cuando el usuario inicia o cierra sesión en Firebase
     LaunchedEffect(auth) {
         auth?.addAuthStateListener { firebaseAuth ->
             currentUser = firebaseAuth.currentUser
         }
     }
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
-
+    // Estructura contenedora que muestra la barra o menú de navegación lateral/inferior
     NavigationSuiteScaffold(
         navigationSuiteItems = {
+            // Recorre los destinos definidos en la enumeración AppDestinations
             AppDestinations.entries.forEach {
                 item(
                     icon = {
@@ -208,162 +261,193 @@ fun ShopListApp(auth: FirebaseAuth? = null) {
             }
         }
     ) {
+        // Marco de la pantalla que ajusta los márgenes automáticos (insets)
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
-
-                // =========================================================================
-                // SECCIÓN DINÁMICA DE AUTENTICACIÓN Y ESTADO DE SESIÓN
-                // =========================================================================
-                if (currentUser != null) {
-                    // --- CASO 1: USUARIO CON SESIÓN INICIADA (MOSTRAR NOMBRE Y BOTÓN CERRAR SESIÓN) ---
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Hola, ${currentUser?.displayName ?: "Usuario"}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                            currentUser?.email?.let { email ->
-                                Text(
-                                    text = email,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        // Botón para cerrar sesión en Firebase Auth
-                        OutlinedButton(
-                            onClick = {
-                                auth?.signOut()
-                                currentUser = null
-                                Toast.makeText(context, "Sesión cerrada", Toast.LENGTH_SHORT).show()
-                            }
-                        ) {
-                            Text("Cerrar sesión")
-                        }
-                    }
-                } else {
-                    // --- CASO 2: USUARIO SIN SESIÓN (MOSTRAR BOTÓN DE INICIAR SESIÓN CON GOOGLE) ---
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                try {
-                                    // 1. Configuración de la opción de inicio de sesión con Google
-                                    val googleIdOption = GetGoogleIdOption.Builder()
-                                        .setServerClientId("242221971105-ekp51thsmg1sqq83q182p5tjengot89m.apps.googleusercontent.com")
-                                        .setFilterByAuthorizedAccounts(false)
-                                        .build()
-
-                                    // 2. Creación de la solicitud para Credential Manager de AndroidX
-                                    val request = GetCredentialRequest.Builder()
-                                        .addCredentialOption(googleIdOption)
-                                        .build()
-
-                                    // 3. Mostramos la interfaz emergente nativa para seleccionar la cuenta
-                                    val result = credentialManager.getCredential(
-                                        context = context,
-                                        request = request
-                                    )
-
-                                    // 4. Autenticación en Firebase con el token recibido
-                                    if (auth != null) {
-                                        handleSignInResult(
-                                            result = result,
-                                            auth = auth,
-                                            onSuccess = { user ->
-                                                currentUser = user
-                                                Toast.makeText(context, "¡Bienvenido, ${user.displayName ?: ""}!", Toast.LENGTH_SHORT).show()
-                                            },
-                                            onError = { errorMsg ->
-                                                Log.e("ShopListApp", "Error al autenticar con Firebase: $errorMsg")
-                                                Toast.makeText(context, "Error: $errorMsg", Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
-                                } catch (e: GetCredentialException) {
-                                    Log.e("ShopListApp", "Error en Credential Manager: ${e.message}", e)
-                                } catch (e: Exception) {
-                                    Log.e("ShopListApp", "Error inesperado: ${e.message}", e)
-                                }
-                            }
-                        },
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text("Iniciar sesión con Google")
-                    }
-                }
-
-                ShopListScreen()
-            }
+            // Muestra la pantalla de listas de compras aplicando el margen superior/inferior
+            ShopListScreen(
+                modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
+                onSignIn = onSignIn,
+                onSignOut = onSignOut
+            )
         }
     }
 }
 
+// =============================================================================
+// SECCIÓN 3: PANTALLAS Y COMPONENTES VISUALES (UI)
+// =============================================================================
+
 /**
- * Función auxiliar para autenticar en Firebase Authentication usando la credencial obtenida de Google.
+ * Pantalla que muestra el listado de listas creadas, permite crear una nueva lista mediante un diálogo
+ * e incluye el botón para iniciar o cerrar sesión.
  */
-private fun handleSignInResult(
-    result: GetCredentialResponse,
-    auth: FirebaseAuth,
-    onSuccess: (FirebaseUser) -> Unit,
-    onError: (String) -> Unit
+@Composable
+fun ShopListScreen(
+    modifier: Modifier = Modifier,
+    currentUser: FirebaseUser? = null,
+    onSignIn: () -> Unit = {},
+    onSignOut: () -> Unit = {}
 ) {
-    val credential = result.credential
-    if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-        // Extraemos el Token ID enviado por Google
-        val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-        val idToken = googleIdTokenCredential.idToken
+    // Estado que almacena la lista de nombres de las listas creadas por el usuario
+    var lists by remember {
+        mutableStateOf(listOf<String>())
+    }
 
-        // Creamos la credencial de Firebase a partir del ID Token de Google
-        val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+    // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
+    var showDialog by remember {
+        mutableStateOf(false)
+    }
 
-        // Autenticamos en Firebase Auth
-        auth.signInWithCredential(firebaseCredential)
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    val user = auth.currentUser
-                    if (user != null) {
-                        Log.d("ShopListApp", "Autenticación exitosa en Firebase para: ${user.email}")
-                        onSuccess(user)
-                    } else {
-                        onError("No se pudo obtener la información del usuario")
+    // Estado que guarda el texto tipeado por el usuario en el cuadro de diálogo
+    var listName by remember {
+        mutableStateOf("")
+    }
+
+    // Columna principal que organiza todos los elementos verticalmente
+    Column(modifier = modifier.padding(16.dp)) {
+
+        // Tarjeta con el título principal de la pantalla
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "List of lists",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                    fontStyle = Italic
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Tarjeta de subtítulo "Listas creadas:"
+        Card(modifier = Modifier.fillMaxWidth()){
+
+            Text(text =" Listas creadas:",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                fontStyle = Italic
+            )
+        }
+
+        Spacer(modifier = Modifier.height(25.dp))
+
+        // Tarjeta contenedora para el botón "Crear nueva lista" y las listas agregadas
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+
+                // Botón para abrir el cuadro de diálogo de creación de lista
+                Button(
+                    onClick = {
+                        listName = "" // Limpia el texto previo
+                        showDialog = true // Muestra el cuadro de diálogo
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Crear nueva lista")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Muestra dinámicamente cada una de las listas agregadas por el usuario
+                lists.forEach { name ->
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        onClick = {
+                            // Aquí se implementará el evento al tocar una lista
+                        }
+                    ) {
+                        Text(
+                            text = name,
+                            modifier = Modifier.padding(16.dp),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
-                } else {
-                    val errorMsg = task.exception?.message ?: "Falló la autenticación en Firebase"
-                    Log.e("ShopListApp", "Error en signInWithCredential: $errorMsg")
-                    onError(errorMsg)
                 }
             }
-    } else {
-        onError("Tipo de credencial no válido para Google")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Botón para Iniciar o Cerrar sesión dependiendo del estado del usuario
+        Button(
+            onClick = { if (currentUser == null) onSignIn() else onSignOut() }
+        ) {
+            Text(if (currentUser == null) "Iniciar sesión" else "Cerrar sesión")
+        }
     }
+
+    // Cuadro de diálogo emergente que se muestra únicamente cuando showDialog es true
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDialog = false // Cierra el diálogo al tocar fuera de él
+            },
+            title = {
+                Text("Nueva lista")
+            },
+            text = {
+                // Campo de texto donde el usuario escribe el nombre de la lista
+                OutlinedTextField(
+                    value = listName,
+                    onValueChange = {
+                        listName = it
+                    },
+                    label = {
+                        Text("Nombre de la lista")
+                    },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                // Botón para guardar la nueva lista escrita
+                TextButton(
+                    onClick = {
+                        if (listName.isNotBlank()) {
+                            lists = lists + listName.trim() // Añade la nueva lista al listado
+                            showDialog = false // Cierra el diálogo
+                        }
+                    },
+                    enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío
+                ) {
+                    Text("Crear")
+                }
+            },
+            dismissButton = {
+                // Botón para cancelar la acción y cerrar el diálogo
+                TextButton(
+                    onClick = {
+                        showDialog = false
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
 }
 
+
+/**
+ * Previsualización sin datos reales para el diseñador de Android Studio
+ */
+@Preview(showBackground = true)
 @Composable
-fun ShopListScreen(modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            text = "Lista de listas - Valentin",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            fontStyle = Italic
-        )
-
-        Text(
-            text = "List of the buying",
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp,
-        )
-
+fun ShopListScreenPreview() {
+    ShopListTheme {
+        ShopListScreen()
     }
 }
 
@@ -385,12 +469,4 @@ enum class AppDestinations(
     HOME("Home", R.drawable.ic_home),
     FAVORITES("Favorites", R.drawable.ic_favorite),
     PROFILE("Profile", R.drawable.ic_account_box),
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    ShopListTheme {
-        ShopListScreen()
-    }
 }
