@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Preview(showSystemUi = true)
+@PreviewScreenSizes
 @Composable
 fun ShopListApp(auth: FirebaseAuth? = null) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
@@ -92,14 +92,9 @@ fun ShopListApp(auth: FirebaseAuth? = null) {
         }
     }
 
-
-
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
-    val arrayOfLists = arrayOf("Lista 1", "Lista 2")
-    var lista1 = "Lista Uno"
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -274,26 +269,8 @@ fun ShopListScreen(modifier: Modifier = Modifier) {
             letterSpacing = 2.sp,
         )
 
-        CrearLista()
-    }
-
-
-}
-
-
-@Composable
-fun CrearLista(){
-    Button(onClick = {
-        print("$lista1")
-    }, modifier = Modifier.padding(16.dp)
-    ){
-        Text("Crear Lista")
     }
 }
-
-
-
-
 
 enum class AppDestinations(
     val label: String,
@@ -304,7 +281,7 @@ enum class AppDestinations(
     PROFILE("Profile", R.drawable.ic_account_box),
 }
 
-//@Preview(showSystemUi = true)
+@Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     ShopListTheme {
