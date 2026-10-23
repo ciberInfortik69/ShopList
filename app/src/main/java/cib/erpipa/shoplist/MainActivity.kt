@@ -459,7 +459,7 @@ fun ShopListScreenPreview() {
  * Home (Inicio), Favorites (Favoritos) y Profile (Perfil).
  *
  * @param label Texto visible en la barra de navegación.
- * @param icon Recurso de imagen/icono asociado a la pestaña.
+ * @param icon Recurso de imagen/icono asociado a la pestaña.dff
  */
 enum class AppDestinations(
     val label: String,
