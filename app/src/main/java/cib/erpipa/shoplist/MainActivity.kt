@@ -442,7 +442,7 @@ fun ShopListScreen(
 /**
  * Previsualización sin datos reales para el diseñador de Android Studio
  */
-@Preview(showBackground = true)
+//@Preview(showBackground = true)
 @Composable
 fun ShopListScreenPreview() {
     ShopListTheme {
