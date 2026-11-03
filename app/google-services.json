@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "242221971105-muagdvmf6cqf10ttc6gqvc9i3nud8mi4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cib.erpipa.shoplist",
+            "certificate_hash": "45c6957e249c72a0a7e049dde0cdd89d5e72b5a5"
+          }
+        },
+        {
           "client_id": "242221971105-ekp51thsmg1sqq83q182p5tjengot89m.apps.googleusercontent.com",
           "client_type": 3
         }
