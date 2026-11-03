@@ -1,5 +1,6 @@
 package cib.erpipa.shoplist.screen
 
+import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,11 +14,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -25,18 +28,48 @@ import androidx.compose.ui.unit.sp
 import cib.erpipa.shoplist.model.ShoppingList
 import cib.erpipa.shoplist.ui.theme.ShopListTheme
 import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.firestore
 
+private const val TAG = "ShopListScreen"
+
 /**
- * Pantalla principal que muestra y permite crear listas de compras (guardando en Firestore).
+ * Pantalla que muestra el listado de listas creadas por el usuario autenticado desde Firestore.
  */
 @Composable
 fun ShopListScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currentUser: FirebaseUser? = null
 ) {
+    val isPreview = LocalInspectionMode.current
+
     // Estado que almacena la lista de nombres de las listas creadas por el usuario
     var lists by remember {
         mutableStateOf(listOf<String>())
+    }
+
+    // Escucha en tiempo real las listas del usuario desde Firestore
+    LaunchedEffect(currentUser) {
+        if (isPreview) {
+            lists = emptyList()
+            return@LaunchedEffect
+        }
+        val uid = currentUser?.uid
+        if (uid != null) {
+            val db = Firebase.firestore
+            db.collection("users").document(uid).collection("lists")
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.w(TAG, "Error al obtener listas de Firestore", e)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        lists = snapshot.documents.mapNotNull { doc -> doc.getString("name") }
+                    }
+                }
+        } else {
+            lists = emptyList()
+        }
     }
 
     // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
@@ -91,12 +124,13 @@ fun ShopListScreen(
 
                 // Muestra dinámicamente cada una de las listas agregadas por el usuario
                 lists.forEach { name ->
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
                         onClick = {
-                            // Evento al pulsar en una lista
+
                         }
                     ) {
                         Text(
@@ -137,14 +171,25 @@ fun ShopListScreen(
                 // Botón para guardar la nueva lista escrita
                 TextButton(
                     onClick = {
-                        if (listName.isNotBlank()) {
-                            lists = lists + listName.trim() // Añade la nueva lista al listado local
+                        val trimmedName = listName.trim()
+                        if (trimmedName.isNotBlank()) {
                             showDialog = false // Cierra el diálogo
+                            val nuevaLista = ShoppingList(name = trimmedName)
+                            val uid = currentUser?.uid
 
-                            // Guarda la nueva lista en Firebase Firestore
-                            val lista1 = ShoppingList(id = 1, name = listName.trim(), products = emptyList())
-                            val db = Firebase.firestore
-                            db.collection("lists").add(lista1)
+                            if (!isPreview) {
+                                val db = Firebase.firestore
+                                if (uid != null) {
+                                    // Guarda la lista dentro de la subcolección del usuario autenticado
+                                    db.collection("users").document(uid).collection("lists").add(nuevaLista)
+                                } else {
+                                    // Si no hay sesión iniciada, guarda en la colección general y actualiza localmente
+                                    db.collection("lists").add(nuevaLista)
+                                    lists = lists + trimmedName
+                                }
+                            } else {
+                                lists = lists + trimmedName
+                            }
                         }
                     },
                     enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío

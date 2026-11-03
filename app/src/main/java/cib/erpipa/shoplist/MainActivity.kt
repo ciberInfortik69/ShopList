@@ -27,7 +27,6 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.ClearCredentialException
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
 import cib.erpipa.shoplist.screen.FavoritesScreen
 import cib.erpipa.shoplist.screen.ProfileScreen
@@ -43,6 +42,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 
 // Etiqueta (TAG) utilizada para filtrar los mensajes de depuración en el Logcat de Android Studio
@@ -116,7 +117,7 @@ class MainActivity : ComponentActivity() {
             .addCredentialOption(googleIdOption)
             .build()
 
-        // Asíncronamente (en una corrutina), solicita la cuenta al usuario
+        // Asíncronamente (en una co-rutina), solicita la cuenta al usuario
         lifecycleScope.launch {
             try {
                 val result = credentialManager.getCredential(
@@ -125,8 +126,8 @@ class MainActivity : ComponentActivity() {
                 )
                 // Procesa la credencial obtenida
                 handleSignIn(result.credential)
-            } catch (e: GetCredentialException) {
-                Log.e(TAG, "No se pudieron obtener las credenciales: ${e.localizedMessage}")
+            } catch (e: Exception) {
+                Log.e(TAG, "No se pudieron obtener las credenciales: ${e.localizedMessage}", e)
             }
         }
     }
@@ -137,7 +138,7 @@ class MainActivity : ComponentActivity() {
     private fun handleSignIn(credential: Credential) {
         if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-            // Autentica en Firebase usando el token obtenido de Google
+            // Autentifica en Firebase usando el token obtenido de Google
             firebaseAuthWithGoogle(googleIdTokenCredential.idToken)
         } else {
             Log.w(TAG, "¡La credencial no es de tipo Google ID!")
@@ -180,10 +181,23 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Método auxiliar para actualizar la interfaz si fuera necesario tras un cambio de usuario
+     * Método auxiliar para registrar/actualizar la información del usuario en Firestore
      */
     private fun updateUI(user: FirebaseUser?) {
-        // Método para actualizar la UI cuando cambie el estado del usuario si fuese necesario
+        if (user != null) {
+            val userData = hashMapOf(
+                "email" to user.email,
+                "displayName" to user.displayName,
+                "photoUrl" to user.photoUrl?.toString()
+            )
+            // Crea o actualiza el documento del usuario en la colección "users"
+            Firebase.firestore.collection("users")
+                .document(user.uid)
+                .set(userData, SetOptions.merge())
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Error guardando usuario en Firestore", e)
+                }
+        }
     }
 }
 
@@ -244,7 +258,8 @@ fun ShopListApp(
             // Renderiza la pantalla seleccionada según el destino actual
             when (currentDestination) {
                 AppDestinations.HOME -> ShopListScreen(
-                    modifier = screenModifier
+                    modifier = screenModifier,
+                    currentUser = currentUser
                 )
                 AppDestinations.FAVORITES -> FavoritesScreen(
                     modifier = screenModifier

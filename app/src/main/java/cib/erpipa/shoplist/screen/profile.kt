@@ -51,15 +51,17 @@ fun ProfileScreen(
     // Estado para guardar el número de listas creadas obtenidas de Firestore
     var listCount by remember { mutableIntStateOf(0) }
 
-    // Escuchador en tiempo real de la colección de listas en Firestore
+    // Escuchador en tiempo real de la colección de listas del usuario en Firestore
     LaunchedEffect(currentUser) {
-        if (currentUser != null) {
+        val uid = currentUser?.uid
+        if (uid != null) {
             val db = Firebase.firestore
-            db.collection("lists").addSnapshotListener { snapshot, _ ->
-                if (snapshot != null) {
-                    listCount = snapshot.size()
+            db.collection("users").document(uid).collection("lists")
+                .addSnapshotListener { snapshot, _ ->
+                    if (snapshot != null) {
+                        listCount = snapshot.size()
+                    }
                 }
-            }
         } else {
             listCount = 0
         }
