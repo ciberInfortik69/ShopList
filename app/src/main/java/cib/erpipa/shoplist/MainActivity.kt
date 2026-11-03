@@ -283,7 +283,7 @@ fun ShopListApp(
  * Enum que define los tres destinos o pestañas principales de la barra de navegación:
  * Home (Inicio), Favorites (Favoritos) y Profile (Perfil).
  *
- * @param label Texto visible en la barra de navegación.
+ * @param label Texto visible en la barra de navegación
  * @param icon Recurso de imagen/icono asociado a la pestaña.
  */
 enum class AppDestinations(
