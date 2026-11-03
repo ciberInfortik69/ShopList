@@ -5,11 +5,21 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,7 +30,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
@@ -29,9 +42,6 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.ClearCredentialException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
-import cib.erpipa.shoplist.screen.FavoritesScreen
-import cib.erpipa.shoplist.screen.ProfileScreen
-import cib.erpipa.shoplist.screen.ShopListScreen
 import cib.erpipa.shoplist.ui.theme.ShopListTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -72,15 +82,10 @@ class MainActivity : ComponentActivity() {
         val products: List<String> = emptyList()
     )
 
-    val db = Firebase.firestore
-
-
     // Variables privadas para gestionar servicios de Firebase y autenticación de Android
     private lateinit var analytics: FirebaseAnalytics
     private lateinit var auth: FirebaseAuth
     private lateinit var credentialManager: CredentialManager
-
-
 
     /**
      * Método que se ejecuta al crearse la actividad por primera vez.
@@ -163,7 +168,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Autentica la cuenta en Firebase Auth usando el ID Token recibido de Google
+     * Autentifica la cuenta en Firebase Auth usando el ID Token recibido de Google
      */
     private fun firebaseAuthWithGoogle(idToken: String) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -257,29 +262,218 @@ fun ShopListApp(
     ) {
         // Marco de la pantalla que ajusta los márgenes automáticos (insets)
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            val screenModifier = Modifier.padding(innerPadding)
-            
-            // Renderiza la pantalla seleccionada según el destino actual
-            when (currentDestination) {
-                AppDestinations.HOME -> ShopListScreen(
-                    modifier = screenModifier
-                )
-                AppDestinations.FAVORITES -> FavoritesScreen(
-                    modifier = screenModifier
-                )
-                AppDestinations.PROFILE -> ProfileScreen(
-                    modifier = screenModifier,
-                    currentUser = currentUser,
-                    onSignIn = onSignIn,
-                    onSignOut = onSignOut
-                )
-            }
+            // Muestra la pantalla de listas de compras aplicando el margen superior/inferior
+            ShopListScreen(
+                modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
+                onSignIn = onSignIn,
+                onSignOut = onSignOut
+            )
         }
     }
 }
 
 // =============================================================================
-// SECCIÓN 3: MODELOS DE NAVEGACIÓN Y DESTINOS
+// SECCIÓN 3: PANTALLAS Y COMPONENTES VISUALES (UI)
+// =============================================================================
+
+/**
+ * Pantalla que muestra el listado de listas creadas, permite crear una nueva lista mediante un diálogo
+ * e incluye el botón para iniciar o cerrar sesión.
+ */
+@Composable
+fun ShopListScreen(
+    modifier: Modifier = Modifier,
+    currentUser: FirebaseUser? = null,
+    onSignIn: () -> Unit = {},
+    onSignOut: () -> Unit = {}
+) {
+    // Estado que almacena la lista de nombres de las listas creadas por el usuario
+    var lists by remember {
+        mutableStateOf(listOf<String>())
+    }
+
+
+
+    // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
+    var showDialog by remember {
+        mutableStateOf(false)
+    }
+
+    // Estado que guarda el texto tipeado por el usuario en el cuadro de diálogo
+    var listName by remember {
+        mutableStateOf("")
+    }
+
+    // Columna principal que organiza todos los elementos verticalmente
+    Column(modifier = modifier.padding(16.dp)) {
+
+        // Tarjeta con el título principal de la pantalla
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "List of lists",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Tarjeta de subtítulo "Listas creadas:"
+
+
+        Spacer(modifier = Modifier.height(25.dp))
+
+        // Tarjeta contenedora para el botón "Crear nueva lista" y las listas agregadas
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+
+                // Botón para abrir el cuadro de diálogo de creación de lista
+                Button(
+                    onClick = {
+                        listName = "" // Limpia el texto previo
+                        showDialog = true // Muestra el cuadro de diálogo
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Crear nueva lista")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+
+
+
+
+                // Create a new user with a first and last name
+//                val user1 = hashMapOf(
+//                    "first" to "Ada",
+//                    "last" to "Lovelace",
+//                    "born" to 1815
+//                )
+//
+//                // Add a new document with a generated ID
+//                db.collection("users")
+//                    .add(user1)
+//                    .addOnSuccessListener { documentReference ->
+//                        Log.d(TAG, "DocumentSnapshot added with ID: ${documentReference.id}")
+//                    }
+//                    .addOnFailureListener { e ->
+//                        Log.w(TAG, "Error adding document", e)
+//                    }
+
+                var lista: MainActivity.ShoppingList = MainActivity.ShoppingList(0, "hola", emptyList())
+
+                // Muestra dinámicamente cada una de las listas agregadas por el usuario
+                lists.forEach { name ->
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        onClick = {
+
+                        }
+                    ) {
+                        Text(
+                            text = name,
+                            modifier = Modifier.padding(16.dp),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Botón para Iniciar o Cerrar sesión dependiendo del estado del usuario
+        Button(
+            onClick = { if (currentUser == null) onSignIn() else onSignOut() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (currentUser == null) "Iniciar sesión" else "Cerrar sesión")
+        }
+    }
+
+    // Cuadro de diálogo emergente que se muestra únicamente cuando showDialog es true
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDialog = false // Cierra el diálogo al tocar fuera de él
+            },
+            title = {
+                Text("Nueva lista")
+            },
+            text = {
+                // Campo de texto donde el usuario escribe el nombre de la lista
+                OutlinedTextField(
+                    value = listName,
+                    onValueChange = {
+                        listName = it
+                    },
+                    label = {
+                        Text("Nombre de la lista")
+                    },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                // Botón para guardar la nueva lista escrita
+                TextButton(
+                    onClick = {
+                        if (listName.isNotBlank()) {
+                            lists = lists + listName.trim() // Añade la nueva lista al listado
+                            showDialog = false // Cierra el diálogo
+                            var lista1: MainActivity.ShoppingList = MainActivity.ShoppingList(id = 1, name = listName, products = emptyList())
+                            val db = Firebase.firestore
+                            db.collection("lists").add(lista1)
+                        }
+                    },
+                    enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío
+                ) {
+                    Text("Crear")
+                }
+            },
+            dismissButton = {
+                // Botón para cancelar la acción y cerrar el diálogo
+                TextButton(
+                    onClick = {
+                        showDialog = false
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+}
+
+
+/**
+ * Previsualización
+ */
+@Preview(showBackground = true)
+@Composable
+fun ShopListScreenPreview() {
+    ShopListTheme {
+        ShopListScreen()
+    }
+}
+
+// =============================================================================
+// SECCIÓN 4: MODELOS DE NAVEGACIÓN Y DESTINOS
 // =============================================================================
 
 /**
