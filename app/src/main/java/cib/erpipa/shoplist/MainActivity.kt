@@ -53,6 +53,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 
@@ -72,12 +73,10 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Modelo de datos que representa una lista de compras individual.
-     * @param id Identificador único numérico de la lista.
      * @param name Nombre o título dado a la lista.
      * @param products Lista de nombres de productos que contiene la lista.
      */
     data class ShoppingList(
-        val id: Int,
         val name: String,
         val products: List<String> = emptyList()
     )
@@ -139,7 +138,7 @@ class MainActivity : ComponentActivity() {
             .addCredentialOption(googleIdOption)
             .build()
 
-        // Asíncronamente (en una corrutina), solicita la cuenta al usuario
+        // Asíncronamente (en una co-rutina), solicita la cuenta al usuario
         lifecycleScope.launch {
             try {
                 val result = credentialManager.getCredential(
@@ -160,7 +159,7 @@ class MainActivity : ComponentActivity() {
     private fun handleSignIn(credential: Credential) {
         if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-            // Autentica en Firebase usando el token obtenido de Google
+            // Autentifica en Firebase usando el token obtenido de Google
             firebaseAuthWithGoogle(googleIdTokenCredential.idToken)
         } else {
             Log.w(TAG, "¡La credencial no es de tipo Google ID!")
@@ -203,10 +202,23 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Método auxiliar para actualizar la interfaz si fuera necesario tras un cambio de usuario
+     * Método auxiliar para registrar/actualizar la información del usuario en Firestore
      */
     private fun updateUI(user: FirebaseUser?) {
-        // Método para actualizar la UI cuando cambie el estado del usuario si fuese necesario
+        if (user != null) {
+            val userData = hashMapOf(
+                "email" to user.email,
+                "displayName" to user.displayName,
+                "photoUrl" to user.photoUrl?.toString()
+            )
+            // Crea o actualiza el documento del usuario en la colección "users"
+            Firebase.firestore.collection("users")
+                .document(user.uid)
+                .set(userData, SetOptions.merge())
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Error guardando usuario en Firestore", e)
+                }
+        }
     }
 }
 
@@ -288,12 +300,31 @@ fun ShopListScreen(
     onSignIn: () -> Unit = {},
     onSignOut: () -> Unit = {}
 ) {
+    val db = Firebase.firestore
+
     // Estado que almacena la lista de nombres de las listas creadas por el usuario
     var lists by remember {
         mutableStateOf(listOf<String>())
     }
 
-
+    // Escucha en tiempo real las listas del usuario desde Firestore
+    LaunchedEffect(currentUser) {
+        val uid = currentUser?.uid
+        if (uid != null) {
+            db.collection("users").document(uid).collection("lists")
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.w(TAG, "Error al obtener listas de Firestore", e)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        lists = snapshot.documents.mapNotNull { doc -> doc.getString("name") }
+                    }
+                }
+        } else {
+            lists = emptyList()
+        }
+    }
 
     // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
     var showDialog by remember {
@@ -322,9 +353,6 @@ fun ShopListScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Tarjeta de subtítulo "Listas creadas:"
-
-
         Spacer(modifier = Modifier.height(25.dp))
 
         // Tarjeta contenedora para el botón "Crear nueva lista" y las listas agregadas
@@ -348,29 +376,6 @@ fun ShopListScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-
-
-
-
-                // Create a new user with a first and last name
-//                val user1 = hashMapOf(
-//                    "first" to "Ada",
-//                    "last" to "Lovelace",
-//                    "born" to 1815
-//                )
-//
-//                // Add a new document with a generated ID
-//                db.collection("users")
-//                    .add(user1)
-//                    .addOnSuccessListener { documentReference ->
-//                        Log.d(TAG, "DocumentSnapshot added with ID: ${documentReference.id}")
-//                    }
-//                    .addOnFailureListener { e ->
-//                        Log.w(TAG, "Error adding document", e)
-//                    }
-
-                var lista: MainActivity.ShoppingList = MainActivity.ShoppingList(0, "hola", emptyList())
-
                 // Muestra dinámicamente cada una de las listas agregadas por el usuario
                 lists.forEach { name ->
 
@@ -392,8 +397,6 @@ fun ShopListScreen(
                 }
             }
         }
-
-
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -432,12 +435,20 @@ fun ShopListScreen(
                 // Botón para guardar la nueva lista escrita
                 TextButton(
                     onClick = {
-                        if (listName.isNotBlank()) {
-                            lists = lists + listName.trim() // Añade la nueva lista al listado
+                        val trimmedName = listName.trim()
+                        if (trimmedName.isNotBlank()) {
                             showDialog = false // Cierra el diálogo
-                            var lista1: MainActivity.ShoppingList = MainActivity.ShoppingList(id = 1, name = listName, products = emptyList())
-                            val db = Firebase.firestore
-                            db.collection("lists").add(lista1)
+                            val nuevaLista = MainActivity.ShoppingList(name = trimmedName)
+                            val uid = currentUser?.uid
+
+                            if (uid != null) {
+                                // Guarda la lista dentro de la subcolección del usuario autenticado
+                                db.collection("users").document(uid).collection("lists").add(nuevaLista)
+                            } else {
+                                // Si no hay sesión iniciada, guarda en la colección general y actualiza localmente
+                                db.collection("lists").add(nuevaLista)
+                                lists = lists + trimmedName
+                            }
                         }
                     },
                     enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío
