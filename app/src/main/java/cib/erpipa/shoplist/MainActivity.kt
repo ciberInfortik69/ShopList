@@ -5,21 +5,11 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,18 +20,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.ClearCredentialException
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
+import cib.erpipa.shoplist.screen.FavoritesScreen
+import cib.erpipa.shoplist.screen.ProfileScreen
+import cib.erpipa.shoplist.screen.ShopListScreen
 import cib.erpipa.shoplist.ui.theme.ShopListTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -70,16 +59,6 @@ private const val TAG = "ShopListApp"
  * manejar el flujo de inicio/cierre de sesión con Google y lanzar la interfaz gráfica (Compose).
  */
 class MainActivity : ComponentActivity() {
-
-    /**
-     * Modelo de datos que representa una lista de compras individual.
-     * @param name Nombre o título dado a la lista.
-     * @param products Lista de nombres de productos que contiene la lista.
-     */
-    data class ShoppingList(
-        val name: String,
-        val products: List<String> = emptyList()
-    )
 
     // Variables privadas para gestionar servicios de Firebase y autenticación de Android
     private lateinit var analytics: FirebaseAnalytics
@@ -147,8 +126,8 @@ class MainActivity : ComponentActivity() {
                 )
                 // Procesa la credencial obtenida
                 handleSignIn(result.credential)
-            } catch (e: GetCredentialException) {
-                Log.e(TAG, "No se pudieron obtener las credenciales: ${e.localizedMessage}")
+            } catch (e: Exception) {
+                Log.e(TAG, "No se pudieron obtener las credenciales: ${e.localizedMessage}", e)
             }
         }
     }
@@ -274,16 +253,7 @@ fun ShopListApp(
     ) {
         // Marco de la pantalla que ajusta los márgenes automáticos (insets)
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            // Muestra la pantalla de listas de compras aplicando el margen superior/inferior
-            ShopListScreen(
-                modifier = Modifier.padding(innerPadding),
-                currentUser = currentUser,
-                onSignIn = onSignIn,
-                onSignOut = onSignOut
-            )
-        }
-    }
-}
+            val screenModifier = Modifier.padding(innerPadding)
 
 // =============================================================================
 // SECCIÓN 3: PANTALLAS Y COMPONENTES VISUALES (UI)
@@ -466,25 +436,12 @@ fun ShopListScreen(
                     Text("Cancelar")
                 }
             }
-        )
-    }
-
-}
-
-
-/**
- * Previsualización
- */
-@Preview(showBackground = true)
-@Composable
-fun ShopListScreenPreview() {
-    ShopListTheme {
-        ShopListScreen()
+        }
     }
 }
 
 // =============================================================================
-// SECCIÓN 4: MODELOS DE NAVEGACIÓN Y DESTINOS
+// SECCIÓN 3: MODELOS DE NAVEGACIÓN Y DESTINOS
 // =============================================================================
 
 /**
