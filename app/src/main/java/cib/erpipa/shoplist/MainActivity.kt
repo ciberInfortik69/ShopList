@@ -1,6 +1,5 @@
 package cib.erpipa.shoplist
 
-import android.R.attr.text
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -31,7 +30,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontStyle.Companion.Italic
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -55,6 +53,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 
 // Etiqueta (TAG) utilizada para filtrar los mensajes de depuración en el Logcat de Android Studio
@@ -169,7 +168,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Autentica la cuenta en Firebase Auth usando el ID Token recibido de Google
+     * Autentifica la cuenta en Firebase Auth usando el ID Token recibido de Google
      */
     private fun firebaseAuthWithGoogle(idToken: String) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -294,6 +293,8 @@ fun ShopListScreen(
         mutableStateOf(listOf<String>())
     }
 
+
+
     // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
     var showDialog by remember {
         mutableStateOf(false)
@@ -313,9 +314,8 @@ fun ShopListScreen(
                 Text(
                     text = "List of lists",
                     fontSize = 30.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp,
-                    fontStyle = Italic
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
                 )
             }
         }
@@ -323,15 +323,7 @@ fun ShopListScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // Tarjeta de subtítulo "Listas creadas:"
-        Card(modifier = Modifier.fillMaxWidth()){
 
-            Text(text =" Listas creadas:",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                fontStyle = Italic
-            )
-        }
 
         Spacer(modifier = Modifier.height(25.dp))
 
@@ -356,6 +348,29 @@ fun ShopListScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+
+
+
+
+                // Create a new user with a first and last name
+//                val user1 = hashMapOf(
+//                    "first" to "Ada",
+//                    "last" to "Lovelace",
+//                    "born" to 1815
+//                )
+//
+//                // Add a new document with a generated ID
+//                db.collection("users")
+//                    .add(user1)
+//                    .addOnSuccessListener { documentReference ->
+//                        Log.d(TAG, "DocumentSnapshot added with ID: ${documentReference.id}")
+//                    }
+//                    .addOnFailureListener { e ->
+//                        Log.w(TAG, "Error adding document", e)
+//                    }
+
+                var lista: MainActivity.ShoppingList = MainActivity.ShoppingList(0, "hola", emptyList())
+
                 // Muestra dinámicamente cada una de las listas agregadas por el usuario
                 lists.forEach { name ->
 
@@ -364,7 +379,7 @@ fun ShopListScreen(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
                         onClick = {
-                            // Aquí se implementará el evento al tocar una lista
+
                         }
                     ) {
                         Text(
@@ -378,11 +393,14 @@ fun ShopListScreen(
             }
         }
 
+
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Botón para Iniciar o Cerrar sesión dependiendo del estado del usuario
         Button(
-            onClick = { if (currentUser == null) onSignIn() else onSignOut() }
+            onClick = { if (currentUser == null) onSignIn() else onSignOut() },
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text(if (currentUser == null) "Iniciar sesión" else "Cerrar sesión")
         }
@@ -417,6 +435,9 @@ fun ShopListScreen(
                         if (listName.isNotBlank()) {
                             lists = lists + listName.trim() // Añade la nueva lista al listado
                             showDialog = false // Cierra el diálogo
+                            var lista1: MainActivity.ShoppingList = MainActivity.ShoppingList(id = 1, name = listName, products = emptyList())
+                            val db = Firebase.firestore
+                            db.collection("lists").add(lista1)
                         }
                     },
                     enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío
@@ -441,7 +462,7 @@ fun ShopListScreen(
 
 
 /**
- * Previsualización sin datos reales para el diseñador de Android Studio
+ * Previsualización
  */
 @Preview(showBackground = true)
 @Composable
@@ -470,4 +491,3 @@ enum class AppDestinations(
     FAVORITES("Favorites", R.drawable.ic_favorite),
     PROFILE("Profile", R.drawable.ic_account_box),
 }
-// update :D
