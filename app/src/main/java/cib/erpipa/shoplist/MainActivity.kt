@@ -255,186 +255,21 @@ fun ShopListApp(
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             val screenModifier = Modifier.padding(innerPadding)
 
-// =============================================================================
-// SECCIÓN 3: PANTALLAS Y COMPONENTES VISUALES (UI)
-// =============================================================================
-
-/**
- * Pantalla que muestra el listado de listas creadas, permite crear una nueva lista mediante un diálogo
- * e incluye el botón para iniciar o cerrar sesión.
- */
-@Composable
-fun ShopListScreen(
-    modifier: Modifier = Modifier,
-    currentUser: FirebaseUser? = null,
-    onSignIn: () -> Unit = {},
-    onSignOut: () -> Unit = {}
-) {
-    val db = Firebase.firestore
-
-    // Estado que almacena la lista de nombres de las listas creadas por el usuario
-    var lists by remember {
-        mutableStateOf(listOf<String>())
-    }
-
-    // Escucha en tiempo real las listas del usuario desde Firestore
-    LaunchedEffect(currentUser) {
-        val uid = currentUser?.uid
-        if (uid != null) {
-            db.collection("users").document(uid).collection("lists")
-                .addSnapshotListener { snapshot, e ->
-                    if (e != null) {
-                        Log.w(TAG, "Error al obtener listas de Firestore", e)
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null) {
-                        lists = snapshot.documents.mapNotNull { doc -> doc.getString("name") }
-                    }
-                }
-        } else {
-            lists = emptyList()
-        }
-    }
-
-    // Estado booleano para controlar si se muestra o se oculta el cuadro de diálogo
-    var showDialog by remember {
-        mutableStateOf(false)
-    }
-
-    // Estado que guarda el texto tipeado por el usuario en el cuadro de diálogo
-    var listName by remember {
-        mutableStateOf("")
-    }
-
-    // Columna principal que organiza todos los elementos verticalmente
-    Column(modifier = modifier.padding(16.dp)) {
-
-        // Tarjeta con el título principal de la pantalla
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "List of lists",
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
+            // Renderiza la pantalla seleccionada según el destino actual
+            when (currentDestination) {
+                AppDestinations.HOME -> ShopListScreen(
+                    modifier = screenModifier,
+                    currentUser = currentUser
                 )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Spacer(modifier = Modifier.height(25.dp))
-
-        // Tarjeta contenedora para el botón "Crear nueva lista" y las listas agregadas
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-
-                // Botón para abrir el cuadro de diálogo de creación de lista
-                Button(
-                    onClick = {
-                        listName = "" // Limpia el texto previo
-                        showDialog = true // Muestra el cuadro de diálogo
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Crear nueva lista")
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Muestra dinámicamente cada una de las listas agregadas por el usuario
-                lists.forEach { name ->
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        onClick = {
-
-                        }
-                    ) {
-                        Text(
-                            text = name,
-                            modifier = Modifier.padding(16.dp),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Botón para Iniciar o Cerrar sesión dependiendo del estado del usuario
-        Button(
-            onClick = { if (currentUser == null) onSignIn() else onSignOut() },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (currentUser == null) "Iniciar sesión" else "Cerrar sesión")
-        }
-    }
-
-    // Cuadro de diálogo emergente que se muestra únicamente cuando showDialog es true
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showDialog = false // Cierra el diálogo al tocar fuera de él
-            },
-            title = {
-                Text("Nueva lista")
-            },
-            text = {
-                // Campo de texto donde el usuario escribe el nombre de la lista
-                OutlinedTextField(
-                    value = listName,
-                    onValueChange = {
-                        listName = it
-                    },
-                    label = {
-                        Text("Nombre de la lista")
-                    },
-                    singleLine = true
+                AppDestinations.FAVORITES -> FavoritesScreen(
+                    modifier = screenModifier
                 )
-            },
-            confirmButton = {
-                // Botón para guardar la nueva lista escrita
-                TextButton(
-                    onClick = {
-                        val trimmedName = listName.trim()
-                        if (trimmedName.isNotBlank()) {
-                            showDialog = false // Cierra el diálogo
-                            val nuevaLista = MainActivity.ShoppingList(name = trimmedName)
-                            val uid = currentUser?.uid
-
-                            if (uid != null) {
-                                // Guarda la lista dentro de la subcolección del usuario autenticado
-                                db.collection("users").document(uid).collection("lists").add(nuevaLista)
-                            } else {
-                                // Si no hay sesión iniciada, guarda en la colección general y actualiza localmente
-                                db.collection("lists").add(nuevaLista)
-                                lists = lists + trimmedName
-                            }
-                        }
-                    },
-                    enabled = listName.isNotBlank() // Se habilita únicamente si el texto no está vacío
-                ) {
-                    Text("Crear")
-                }
-            },
-            dismissButton = {
-                // Botón para cancelar la acción y cerrar el diálogo
-                TextButton(
-                    onClick = {
-                        showDialog = false
-                    }
-                ) {
-                    Text("Cancelar")
-                }
+                AppDestinations.PROFILE -> ProfileScreen(
+                    modifier = screenModifier,
+                    currentUser = currentUser,
+                    onSignIn = onSignIn,
+                    onSignOut = onSignOut
+                )
             }
         }
     }
