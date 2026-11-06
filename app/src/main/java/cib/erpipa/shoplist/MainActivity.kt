@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Inicia sesión en Firebase utilizando el token de Google,
-     * vinculando las listas creadas de forma anónima a la cuenta de Google.
+     * vinculando y migrando las listas creadas de forma anónima hacia la cuenta de Google.
      */
     private fun firebaseAuthWithGoogle(idToken: String) {
 
@@ -160,18 +160,25 @@ class MainActivity : ComponentActivity() {
         val currentUser = auth.currentUser
 
         if (currentUser != null && currentUser.isAnonymous) {
-            // Vincular cuenta anónima existente con las credenciales de Google
+            val prevAnonUid = currentUser.uid
             currentUser.linkWithCredential(credential)
                 .addOnCompleteListener(this) { task ->
                     if (task.isSuccessful) {
                         Log.d(TAG, "Cuenta anónima vinculada correctamente a Google.")
                         updateUI(auth.currentUser)
                     } else {
-                        Log.w(TAG, "No se pudo vincular (posible cuenta existente), iniciando sesión normalmente", task.exception)
+                        Log.w(TAG, "Cuenta de Google ya existente. Migrando listas anónimas...", task.exception)
                         auth.signInWithCredential(credential)
                             .addOnCompleteListener(this) { signInTask ->
                                 if (signInTask.isSuccessful) {
-                                    updateUI(auth.currentUser)
+                                    val newGoogleUser = auth.currentUser
+                                    if (newGoogleUser != null) {
+                                        migrateListsFromAnonToGoogle(prevAnonUid, newGoogleUser.uid) {
+                                            updateUI(newGoogleUser)
+                                        }
+                                    } else {
+                                        updateUI(null)
+                                    }
                                 } else {
                                     updateUI(null)
                                 }
@@ -190,6 +197,44 @@ class MainActivity : ComponentActivity() {
                     }
                 }
         }
+    }
+
+    /**
+     * Migra las listas creadas en estado anónimo a la cuenta autenticada de Google.
+     */
+    private fun migrateListsFromAnonToGoogle(anonUid: String, googleUid: String, onComplete: () -> Unit) {
+        if (anonUid.isBlank() || googleUid.isBlank() || anonUid == googleUid) {
+            onComplete()
+            return
+        }
+
+        val db = Firebase.firestore
+        db.collection("users").document(anonUid).collection("lists").get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    onComplete()
+                    return@addOnSuccessListener
+                }
+
+                val batch = db.batch()
+                snapshot.documents.forEach { doc ->
+                    val listData = doc.data?.toMutableMap() ?: mutableMapOf()
+                    listData["ownerId"] = googleUid
+
+                    val newListRef = db.collection("users").document(googleUid).collection("lists").document(doc.id)
+                    val newMembershipRef = db.collection("users").document(googleUid).collection("memberships").document(doc.id)
+
+                    batch.set(newListRef, listData)
+                    batch.set(newMembershipRef, mapOf("listId" to doc.id, "ownerId" to googleUid, "role" to "owner", "joinedAt" to System.currentTimeMillis()))
+                }
+
+                batch.commit().addOnCompleteListener {
+                    onComplete()
+                }
+            }
+            .addOnFailureListener {
+                onComplete()
+            }
     }
 
     /**
