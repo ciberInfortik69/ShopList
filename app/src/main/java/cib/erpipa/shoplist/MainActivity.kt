@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import cib.erpipa.shoplist.screen.FavoritesScreen
 import cib.erpipa.shoplist.screen.ListScreen
 import cib.erpipa.shoplist.screen.ProfileScreen
+import cib.erpipa.shoplist.screen.SearchScreen
 import cib.erpipa.shoplist.screen.ShopListScreen
 import cib.erpipa.shoplist.ui.theme.ShopListTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -455,6 +456,19 @@ fun ShopListApp(
                     }
                 }
 
+                AppDestinations.SEARCH -> {
+
+                    SearchScreen(
+                        modifier = screenModifier,
+                        currentUser = currentUser,
+                        onOpenList = { listId, ownerId ->
+                            selectedListId = listId
+                            selectedListOwnerId = ownerId
+                            currentDestination = AppDestinations.HOME
+                        }
+                    )
+                }
+
                 AppDestinations.FAVORITES -> {
 
                     FavoritesScreen(
@@ -485,6 +499,8 @@ enum class AppDestinations(
 ) {
 
     HOME("Home", R.drawable.ic_home),
+
+    SEARCH("Search", R.drawable.ic_search),
 
     FAVORITES("Favorites", R.drawable.ic_favorite),
 

@@ -2,6 +2,7 @@ package cib.erpipa.shoplist.screen
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -108,6 +110,9 @@ fun ListScreen(
     } else {
         isOwner || isMember
     }
+
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameInput by remember { mutableStateOf("") }
 
     /*
      * Escucha los cambios del documento de la lista en users/{ownerId}/lists/{listId}
@@ -209,7 +214,13 @@ fun ListScreen(
             Text(
                 text = listName,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable(enabled = canEdit) {
+                        renameInput = listName
+                        showRenameDialog = true
+                    }
+                    .padding(4.dp)
             )
         }
 
@@ -458,6 +469,56 @@ fun ListScreen(
                 }
             }
         }
+    }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Renombrar lista") },
+            text = {
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    label = { Text("") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = renameInput.trim()
+                        if (trimmed.isNotBlank() && !isPreview) {
+                            val currentUid = currentUser?.uid ?: "local_user"
+                            val targetOwnerId = if (ownerId.isNotBlank()) ownerId else currentUid
+                            Firebase.firestore
+                                .collection("users")
+                                .document(targetOwnerId)
+                                .collection("lists")
+                                .document(listId)
+                                .update(
+                                    mapOf(
+                                        "name" to trimmed,
+                                        "updatedAt" to System.currentTimeMillis()
+                                    )
+                                )
+                                .addOnFailureListener { error ->
+                                    Log.e(TAG, "Error al renombrar la lista", error)
+                                    errorMessage = "No se pudo renombrar la lista."
+                                }
+                        }
+                        showRenameDialog = false
+                    },
+                    enabled = renameInput.isNotBlank()
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 
