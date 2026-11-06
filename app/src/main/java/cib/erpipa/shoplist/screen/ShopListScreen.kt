@@ -207,8 +207,10 @@ fun ShopListScreen(
                     }
 
                     if (snapshot != null) {
-                        // Conservamos solo las listas compartidas por otros usuarios
-                        lists.removeAll { it.ownerId == uid }
+                        // Conservamos únicamente las listas que NO pertenecen al usuario actual (compartidas por otros)
+                        val sharedLists = lists.filter { it.ownerId != uid && it.ownerId != "local_user" }
+                        lists.clear()
+                        lists.addAll(sharedLists)
 
                         snapshot.documents.forEach { doc ->
                             lists.add(
@@ -221,6 +223,9 @@ fun ShopListScreen(
                                 )
                             )
                         }
+                        val distinctLists = lists.distinctBy { it.name.lowercase().trim() }
+                        lists.clear()
+                        lists.addAll(distinctLists)
                         lists.sortBy { it.name.lowercase() }
                     }
                 }
@@ -276,6 +281,9 @@ fun ShopListScreen(
 
                                     lists.removeAll { it.id == listId }
                                     lists.add(entry)
+                                    val distinctLists = lists.distinctBy { it.name.lowercase().trim() }
+                                    lists.clear()
+                                    lists.addAll(distinctLists)
                                     lists.sortBy { it.name.lowercase() }
                                 }
 
@@ -720,8 +728,9 @@ fun ShopListScreen(
                         val trimmed = renameText.trim()
                         if (trimmed.isNotBlank()) {
                             if (!isPreview) {
+                                val uid = currentUser?.uid ?: "local_user"
                                 Firebase.firestore.collection("users")
-                                    .document(targetList.ownerId)
+                                    .document(uid)
                                     .collection("lists")
                                     .document(targetList.id)
                                     .update(
@@ -760,24 +769,22 @@ fun ShopListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val user = currentUser
-                        if (user != null && !isPreview) {
+                        if (!isPreview) {
                             val db = Firebase.firestore
+                            val uid = currentUser?.uid ?: "local_user"
                             val batch = db.batch()
 
                             val membershipRef = db.collection("users")
-                                .document(user.uid)
+                                .document(uid)
                                 .collection("memberships")
                                 .document(targetList.id)
                             batch.delete(membershipRef)
 
-                            if (targetList.ownerId == user.uid) {
-                                val listRef = db.collection("users")
-                                    .document(user.uid)
-                                    .collection("lists")
-                                    .document(targetList.id)
-                                batch.delete(listRef)
-                            }
+                            val listRef = db.collection("users")
+                                .document(uid)
+                                .collection("lists")
+                                .document(targetList.id)
+                            batch.delete(listRef)
 
                             batch.commit()
                                 .addOnFailureListener { error ->

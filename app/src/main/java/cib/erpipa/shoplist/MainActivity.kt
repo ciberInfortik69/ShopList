@@ -86,15 +86,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
 
         val user = auth.currentUser
-        if (user == null) {
-            auth.signInAnonymously().addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    updateUI(auth.currentUser)
-                }
-            }
-        } else {
-            updateUI(user)
-        }
+        updateUI(user)
     }
 
     /**
@@ -152,64 +144,104 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Inicia sesión en Firebase utilizando el token de Google,
-     * vinculando y migrando las listas creadas de forma anónima hacia la cuenta de Google.
+     * sincronizando las listas locales ("local_user") con la cuenta de Google.
      */
     private fun firebaseAuthWithGoogle(idToken: String) {
 
         val credential = GoogleAuthProvider.getCredential(idToken, null)
-        val currentUser = auth.currentUser
-
-        if (currentUser != null && currentUser.isAnonymous) {
-            val prevAnonUid = currentUser.uid
-            currentUser.linkWithCredential(credential)
-                .addOnCompleteListener(this) { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Cuenta anónima vinculada correctamente a Google.")
-                        updateUI(auth.currentUser)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    Log.d(TAG, "Inicio de sesión correcto con Google.")
+                    val newGoogleUser = auth.currentUser
+                    if (newGoogleUser != null) {
+                        syncLocalListsToGoogle(newGoogleUser.uid) {
+                            updateUI(newGoogleUser)
+                        }
                     } else {
-                        Log.w(TAG, "Cuenta de Google ya existente. Migrando listas anónimas...", task.exception)
-                        auth.signInWithCredential(credential)
-                            .addOnCompleteListener(this) { signInTask ->
-                                if (signInTask.isSuccessful) {
-                                    val newGoogleUser = auth.currentUser
-                                    if (newGoogleUser != null) {
-                                        migrateListsFromAnonToGoogle(prevAnonUid, newGoogleUser.uid) {
-                                            updateUI(newGoogleUser)
-                                        }
-                                    } else {
-                                        updateUI(null)
-                                    }
-                                } else {
-                                    updateUI(null)
-                                }
-                            }
-                    }
-                }
-        } else {
-            auth.signInWithCredential(credential)
-                .addOnCompleteListener(this) { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Inicio de sesión correcto.")
-                        updateUI(auth.currentUser)
-                    } else {
-                        Log.w(TAG, "Error al iniciar sesión.", task.exception)
                         updateUI(null)
                     }
+                } else {
+                    Log.w(TAG, "Error al iniciar sesión con Google.", task.exception)
+                    updateUI(null)
                 }
-        }
+            }
     }
 
     /**
-     * Migra las listas creadas en estado anónimo a la cuenta autenticada de Google.
+     * Sincroniza las listas locales ("local_user") con la cuenta autenticada de Google:
+     * - Sube o actualiza las listas creadas/modificadas en local.
+     * - Elimina de la nube aquellas listas que fueron borradas en local mientras se estaba sin sesión.
      */
-    private fun migrateListsFromAnonToGoogle(anonUid: String, googleUid: String, onComplete: () -> Unit) {
-        if (anonUid.isBlank() || googleUid.isBlank() || anonUid == googleUid) {
+    private fun syncLocalListsToGoogle(googleUid: String, onComplete: () -> Unit) {
+        if (googleUid.isBlank()) {
             onComplete()
             return
         }
 
         val db = Firebase.firestore
-        db.collection("users").document(anonUid).collection("lists").get()
+        val localListsRef = db.collection("users").document("local_user").collection("lists")
+        val localMembershipsRef = db.collection("users").document("local_user").collection("memberships")
+        val cloudListsRef = db.collection("users").document(googleUid).collection("lists")
+        val cloudMembershipsRef = db.collection("users").document(googleUid).collection("memberships")
+
+        localListsRef.get().addOnSuccessListener { localSnapshot ->
+            cloudListsRef.get().addOnSuccessListener { cloudSnapshot ->
+                val batch = db.batch()
+
+                val localDocsMap = localSnapshot.documents.associateBy { it.id }
+
+                // 1. Procesar listas locales (nuevas o actualizadas)
+                localSnapshot.documents.forEach { doc ->
+                    val listData = doc.data?.toMutableMap() ?: mutableMapOf()
+                    listData["ownerId"] = googleUid
+
+                    val newListRef = cloudListsRef.document(doc.id)
+                    val newMembershipRef = cloudMembershipsRef.document(doc.id)
+
+                    batch.set(newListRef, listData)
+                    batch.set(newMembershipRef, mapOf(
+                        "listId" to doc.id,
+                        "ownerId" to googleUid,
+                        "role" to "owner",
+                        "joinedAt" to System.currentTimeMillis()
+                    ))
+
+                    // Eliminar copia local para que pasen a la nube del usuario
+                    batch.delete(doc.reference)
+                    batch.delete(localMembershipsRef.document(doc.id))
+                }
+
+                // 2. Procesar listas en la nube que ya no están en local (eliminadas en modo local)
+                cloudSnapshot.documents.forEach { cloudDoc ->
+                    if (!localDocsMap.containsKey(cloudDoc.id)) {
+                        batch.delete(cloudDoc.reference)
+                        batch.delete(cloudMembershipsRef.document(cloudDoc.id))
+                    }
+                }
+
+                batch.commit().addOnCompleteListener {
+                    onComplete()
+                }
+            }.addOnFailureListener {
+                onComplete()
+            }
+        }.addOnFailureListener {
+            onComplete()
+        }
+    }
+
+    /**
+     * Copia las listas de la nube de Google a local ("local_user") al cerrar sesión.
+     */
+    private fun copyCloudListsToLocal(googleUid: String, onComplete: () -> Unit) {
+        if (googleUid.isBlank()) {
+            onComplete()
+            return
+        }
+
+        val db = Firebase.firestore
+        db.collection("users").document(googleUid).collection("lists").get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
                     onComplete()
@@ -219,13 +251,13 @@ class MainActivity : ComponentActivity() {
                 val batch = db.batch()
                 snapshot.documents.forEach { doc ->
                     val listData = doc.data?.toMutableMap() ?: mutableMapOf()
-                    listData["ownerId"] = googleUid
+                    listData["ownerId"] = "local_user"
 
-                    val newListRef = db.collection("users").document(googleUid).collection("lists").document(doc.id)
-                    val newMembershipRef = db.collection("users").document(googleUid).collection("memberships").document(doc.id)
+                    val localListRef = db.collection("users").document("local_user").collection("lists").document(doc.id)
+                    val localMembershipRef = db.collection("users").document("local_user").collection("memberships").document(doc.id)
 
-                    batch.set(newListRef, listData)
-                    batch.set(newMembershipRef, mapOf("listId" to doc.id, "ownerId" to googleUid, "role" to "owner", "joinedAt" to System.currentTimeMillis()))
+                    batch.set(localListRef, listData)
+                    batch.set(localMembershipRef, mapOf("listId" to doc.id, "ownerId" to "local_user", "role" to "owner", "joinedAt" to System.currentTimeMillis()))
                 }
 
                 batch.commit().addOnCompleteListener {
@@ -238,29 +270,41 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Cierra la sesión de Firebase y limpia las credenciales.
+     * Cierra la sesión de Firebase y limpia las credenciales,
+     * copiando previamente las listas a local ("local_user").
      */
     fun signOut() {
+        val currentUser = auth.currentUser
+        val googleUid = currentUser?.uid
 
-        auth.signOut()
+        val doSignOut = {
+            auth.signOut()
+            lifecycleScope.launch {
+                try {
 
-        lifecycleScope.launch {
-            try {
+                    val clearRequest = ClearCredentialStateRequest()
 
-                val clearRequest = ClearCredentialStateRequest()
+                    credentialManager.clearCredentialState(clearRequest)
 
-                credentialManager.clearCredentialState(clearRequest)
+                    updateUI(null)
 
-                updateUI(null)
+                } catch (e: ClearCredentialException) {
 
-            } catch (e: ClearCredentialException) {
-
-                Log.e(
-                    TAG,
-                    "No se pudieron limpiar las credenciales: ${e.localizedMessage}",
-                    e
-                )
+                    Log.e(
+                        TAG,
+                        "No se pudieron limpiar las credenciales: ${e.localizedMessage}",
+                        e
+                    )
+                }
             }
+        }
+
+        if (googleUid != null) {
+            copyCloudListsToLocal(googleUid) {
+                doSignOut()
+            }
+        } else {
+            doSignOut()
         }
     }
 
