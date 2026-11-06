@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
@@ -99,19 +100,27 @@ fun ListScreen(
         mutableStateOf(false)
     }
 
-    val canEdit = (currentUser != null) && (isOwner || isMember)
+    val isPreview = LocalInspectionMode.current
+    val isGoogleUser = currentUser != null && !currentUser.isAnonymous
+
+    val canEdit = if (!isGoogleUser) {
+        true
+    } else {
+        isOwner || isMember
+    }
 
     /*
      * Escucha los cambios del documento de la lista en users/{ownerId}/lists/{listId}
      */
-    DisposableEffect(listId, ownerId, currentUser) {
+    DisposableEffect(listId, ownerId, currentUser, isPreview) {
 
-        if (currentUser == null || listId.isBlank()) {
+        if (isPreview || listId.isBlank()) {
             shoppingItems.clear()
             onDispose { }
         } else {
             val db = Firebase.firestore
-            val targetOwnerId = if (ownerId.isNotBlank()) ownerId else currentUser.uid
+            val currentUid = currentUser?.uid ?: ""
+            val targetOwnerId = if (ownerId.isNotBlank()) ownerId else currentUid
 
             val listReference = db.collection("users")
                 .document(targetOwnerId)
@@ -119,10 +128,10 @@ fun ListScreen(
                 .document(listId)
 
             var memberListener: ListenerRegistration? = null
-            if (currentUser.uid != targetOwnerId) {
+            if (currentUid.isNotBlank() && currentUid != targetOwnerId) {
                 memberListener = listReference
                     .collection("members")
-                    .document(currentUser.uid)
+                    .document(currentUid)
                     .addSnapshotListener { memDoc, _ ->
                         isMember = memDoc != null && memDoc.exists()
                     }
@@ -142,7 +151,7 @@ fun ListScreen(
                     listName = snapshot.getString("name") ?: "Lista de la compra"
                     isPublicList = snapshot.getBoolean("isPublic") ?: false
                     val docOwnerId = snapshot.getString("ownerId") ?: targetOwnerId
-                    if (currentUser.uid == docOwnerId) {
+                    if (currentUser?.uid == docOwnerId) {
                         isOwner = true
                     }
 
@@ -239,21 +248,21 @@ fun ListScreen(
             Button(
                 onClick = {
                     val name = newItemName.trim()
-                    val user = currentUser
 
-                    if (name.isNotBlank() && user != null && !isAdding && canEdit) {
+                    if (name.isNotBlank() && !isAdding && canEdit) {
 
                         isAdding = true
                         errorMessage = null
 
                         val timestamp = System.currentTimeMillis()
-                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else user.uid
+                        val creatorUid = currentUser?.uid ?: "local_user"
+                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else creatorUid
 
                         val newProductMap = mapOf(
                             "name" to name,
                             "bought" to false,
                             "important" to false,
-                            "createdBy" to user.uid,
+                            "createdBy" to creatorUid,
                             "createdAt" to timestamp,
                             "updatedAt" to timestamp
                         )
@@ -331,7 +340,7 @@ fun ListScreen(
                                 Checkbox(
                                     checked = item.bought,
                                     onCheckedChange = { checked ->
-                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "")
+                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "local_user")
                                         if (idx in rawProductsList.indices && targetOwnerId.isNotBlank()) {
                                             val updatedList = rawProductsList.mapIndexed { i, map ->
                                                 if (i == idx) {
@@ -386,7 +395,7 @@ fun ListScreen(
 
                                 TextButton(
                                     onClick = {
-                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "")
+                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "local_user")
                                         if (idx in rawProductsList.indices && targetOwnerId.isNotBlank()) {
                                             val updatedList = rawProductsList.mapIndexed { i, map ->
                                                 if (i == idx) {
@@ -420,7 +429,7 @@ fun ListScreen(
 
                                 TextButton(
                                     onClick = {
-                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "")
+                                        val targetOwnerId = if (ownerId.isNotBlank()) ownerId else (currentUser?.uid ?: "local_user")
                                         if (idx in rawProductsList.indices && targetOwnerId.isNotBlank()) {
                                             val updatedList = rawProductsList.filterIndexed { i, _ -> i != idx }
 

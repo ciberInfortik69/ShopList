@@ -67,6 +67,8 @@ fun ProfileScreen(
         }
     }
 
+    val isGoogleUser = currentUser != null && !currentUser.isAnonymous
+
     Column(modifier = modifier.padding(16.dp)) {
 
         Card(
@@ -77,10 +79,11 @@ fun ProfileScreen(
                 modifier = Modifier.padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (currentUser != null) {
+                if (isGoogleUser) {
+                    val user = currentUser
                     // Avatar con la primera letra del nombre o email
-                    val initial = (currentUser.displayName?.take(1)
-                        ?: currentUser.email?.take(1)
+                    val initial = (user.displayName?.take(1)
+                        ?: user.email?.take(1)
                         ?: "U").uppercase()
 
                     Box(
@@ -102,14 +105,14 @@ fun ProfileScreen(
 
                     // Nombre del usuario
                     Text(
-                        text = currentUser.displayName ?: "Usuario de Google",
+                        text = user.displayName ?: "Usuario de Google",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     )
 
                     // Email del usuario
                     Text(
-                        text = currentUser.email ?: "Sin correo registrado",
+                        text = user.email ?: "Sin correo registrado",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -133,7 +136,7 @@ fun ProfileScreen(
                     )
 
                     // Fecha de registro de la cuenta si está disponible
-                    currentUser.metadata?.creationTimestamp?.let { timestamp ->
+                    user.metadata?.creationTimestamp?.let { timestamp ->
                         if (timestamp > 0) {
                             Spacer(modifier = Modifier.height(10.dp))
                             val dateStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(timestamp))
@@ -145,7 +148,7 @@ fun ProfileScreen(
                     }
 
                 } else {
-                    // Estado cuando no hay sesión iniciada
+                    // Estado cuando no hay sesión iniciada con Google
                     Text(
                         text = "Perfil de Usuario",
                         fontSize = 22.sp,
@@ -155,7 +158,7 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Inicia sesión con tu cuenta de Google para sincronizar tus listas de compras en todos tus dispositivos.",
+                        text = "Inicia sesión con tu cuenta de Google para sincronizar tus listas de compras y compartirlas con otros usuarios.",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -167,16 +170,16 @@ fun ProfileScreen(
 
         // Botón de Inicio o Cierre de Sesión
         Button(
-            onClick = { if (currentUser == null) onSignIn() else onSignOut() },
+            onClick = { if (isGoogleUser) onSignOut() else onSignIn() },
             modifier = Modifier.fillMaxWidth(),
-            colors = if (currentUser != null) {
+            colors = if (isGoogleUser) {
                 ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             } else {
                 ButtonDefaults.buttonColors()
             }
         ) {
             Text(
-                text = if (currentUser == null) "Iniciar sesión con Google" else "Cerrar sesión",
+                text = if (isGoogleUser) "Cerrar sesión" else "Iniciar sesión con Google",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
