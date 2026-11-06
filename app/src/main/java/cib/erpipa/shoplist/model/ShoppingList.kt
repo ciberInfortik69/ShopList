@@ -1,12 +1,18 @@
 package cib.erpipa.shoplist.model
 
 /**
- * Modelo de datos que representa una lista de compras individual.
+ * Representa una lista de la compra compartida.
  *
- * @param name Nombre o título dado a la lista.
- * @param products Lista de nombres de productos que contiene la lista.
+ * @param name Nombre de la lista.
+ * @param ownerId UID del usuario que creó la lista.
+ * @param createdAt Fecha de creación de la lista.
+ * @param updatedAt Fecha de la última modificación.
  */
 data class ShoppingList(
     val name: String = "",
-    val products: List<String> = emptyList()
+    val code: String = "",
+    val isPublic: Boolean = false,
+    val ownerId: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
 )
